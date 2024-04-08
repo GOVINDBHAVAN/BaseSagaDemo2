@@ -28,7 +28,6 @@ namespace BaseSagaDemo
                 {
                     x.Saga.CorrelationId = x.Message.CorrelationId;
                     OnStartProcessing(x);
-                    //x.Saga.EmpCode = x.Message.EmpCode;
                 })
                 .TransitionTo(Processing)
             );
@@ -37,27 +36,15 @@ namespace BaseSagaDemo
                 When(ProcessingStatusRequested)
                     .Respond(x =>
                     {
-                        var rtn = OnResponseToCurrentState(x);
+                        var rtn = new BaseSagaStateMachineStatusResult
+                        {
+                            Id = x.Saga.CorrelationId,
+                            CurrentState = x.Saga.CurrentState,
+                        };
                         return rtn;
                     }
                 )
             );
-        }
-
-        /// <summary>
-        /// Prepare a response to return current state machine status
-        /// </summary>
-        protected virtual BaseSagaStateMachineStatusResult<TState> OnResponseToCurrentState(BehaviorContext<TState, BaseSagaStateMachineStatus<TState>> context)
-        {
-            var rtn = new BaseSagaStateMachineStatusResult<TState>
-            {
-                Id = context.Saga.CorrelationId,
-                CurrentState = context.Saga.CurrentState,
-                //EmpCode = x.Saga.EmpCode,
-                //EmployeeId = x.Saga.EmployeeId,
-                //StartTimeUtc = x.Saga.StartTimeUtc,
-            };
-            return rtn;
         }
 
         /// <summary>
@@ -71,17 +58,17 @@ namespace BaseSagaDemo
         /// <summary>
         /// State represents currently it's in processing stage
         /// </summary>
-        public State Processing { get; }
+        public State Processing { get; set; }
 
         /// <summary>
         /// Event which fires to return the current state of saga state machine
         /// </summary>
-        public Event<BaseSagaStateMachineStatus<TState>> ProcessingStatusRequested { get; }
+        public Event<BaseSagaStateMachineStatus> ProcessingStatusRequested { get; set; }
 
         /// <summary>
         /// Event which fires to actually start the saga state machine instance
         /// </summary>
-        public Event<BaseStartSagaStateMachine<TState>> StartProcessing { get; }
+        public Event<BaseStartSagaStateMachine<TState>> StartProcessing { get; set; }
     }
 
     #region Base Classes
@@ -95,29 +82,36 @@ namespace BaseSagaDemo
     /// <summary>
     /// This is base class of the state instance used in SagaStateMachineInstance <see cref="BaseStateMachine{T}"/>
     /// </summary>
-    public abstract class BaseState /*<TCurrentState>*/ : SagaStateMachineInstance
+    public abstract class BaseState : SagaStateMachineInstance
     {
-        //public TCurrentState CurrentState { get; set; } = default(TCurrentState)!;
-        public int CurrentState { get; set; }
+        // Uncomment this
+        //public int CurrentState { get; set; }
+
+        // Comment this
+        public string CurrentState { get; set; } = string.Empty;
         public Guid CorrelationId { get; set; }
     }
 
     /// <summary>
     /// Base event to get the current status of saga state machine
     /// </summary>
-    public record BaseSagaStateMachineStatus<T> : SagaBaseEvent
-        where T : BaseState
+    public record BaseSagaStateMachineStatus : SagaBaseEvent
+        //where T : BaseState
     {
     }
 
     /// <summary>
     /// Result to retun, the current status of the Saga state machine in the response to call of <see cref="BaseSagaStateMachineStatus{T}"/> event to the caller
     /// </summary>
-    public record BaseSagaStateMachineStatusResult<T>
-        where T : BaseState
+    public record BaseSagaStateMachineStatusResult
     {
         public Guid Id { get; init; }
-        public int CurrentState { get; set; }
+
+        //Uncomment this
+        //public int CurrentState { get; set; }
+
+        // comment this
+        public string CurrentState { get; set; } = string.Empty;
     }
 
     /// <summary>

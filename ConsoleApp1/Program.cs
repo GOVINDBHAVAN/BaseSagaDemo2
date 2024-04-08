@@ -9,7 +9,6 @@ var builder = Host.CreateApplicationBuilder(args);
     
 var assembly = typeof(BaseState).Assembly;
 
-
 builder.Services.AddRabbitMq(builder.Configuration,
     (x) => {
         x.AddConsumers(assembly);
@@ -31,14 +30,28 @@ builder.Services.AddOptions<MassTransitHostOptions>()
         options.StopTimeout = TimeSpan.FromMinutes(1);
     });
 
-builder.Services.AddTransient<PrepareDemo>();
+builder.Services.AddTransient<SenderClient>();
 
 using IHost host = builder.Build();
 
 Console.WriteLine("Preparing Demo");
-await host.RunAsync();
-// this will not execute because error will come in the above Run : The event property is not writable: StartProcessing
-await MakeDemo(host.Services);
+try
+{
+    await host.StartAsync();
+
+    await MakeDemo(host.Services);
+
+    await host.WaitForShutdownAsync();
+
+    Console.WriteLine("Main: RunAsync has completed");
+}
+finally
+{
+    Console.WriteLine("Main: stopping");
+
+    if (host is IAsyncDisposable d) await d.DisposeAsync();
+}
+//await host.RunAsync();
 
 async Task MakeDemo(IServiceProvider hostProvider)
 {
@@ -47,7 +60,7 @@ async Task MakeDemo(IServiceProvider hostProvider)
 
     Console.WriteLine("Initializing MassTransit Base Saga");
 
-    var obj = provider.GetRequiredService<PrepareDemo>();
+    var obj = provider.GetRequiredService<SenderClient>();
     var data = new TestStart()
     {
         EmpCode = "001",
@@ -55,12 +68,31 @@ async Task MakeDemo(IServiceProvider hostProvider)
         ActivityTimeUtc = DateTime.UtcNow
     };
     await obj.MakeRequest(data);
-    Console.WriteLine("Request sent");
+    Console.WriteLine("Request sent, now we'll check the state shortly");
+    await Task.Delay(3000);
+
+    var client = provider.GetRequiredService<IRequestClient<BaseSagaStateMachineStatus>>();
+    try
+    {
+        Console.WriteLine("Making get status request");
+        var response = await client.GetResponse<BaseSagaStateMachineStatusResult>(new BaseSagaStateMachineStatus
+        {
+            CorrelationId = data.CorrelationId
+        });
+        Console.WriteLine($"Status is: {response.Message.CurrentState} ({response.Message.CurrentState.GetType().Name})");
+    }
+    catch (Exception ex) 
+    {
+        Console.WriteLine($"{ex.Message}");
+    }
+
+    Console.WriteLine("Done");
+
 }
-public class PrepareDemo
+public class SenderClient
 {
     private readonly IPublishEndpoint _publishEndpoint;
-    public PrepareDemo(IPublishEndpoint publishEndpoint)
+    public SenderClient(IPublishEndpoint publishEndpoint)
     {
         _publishEndpoint = publishEndpoint;
     }
